@@ -1263,6 +1263,7 @@ impl<T: 'static> EventProcessor<T> {
         }
     }
 
+    // Update modifiers state and emit key events based on which keys are currently pressed.
     fn handle_pressed_keys<F>(
         wt: &super::EventLoopWindowTarget<T>,
         window_id: crate::window::WindowId,
@@ -1276,7 +1277,10 @@ impl<T: 'static> EventProcessor<T> {
     {
         let device_id = mkdid(util::VIRTUAL_CORE_KEYBOARD);
 
-        // Update modifiers state and emit key events based on which keys are currently pressed.
+        // store non modifier keys so we can handle them after the modifiers
+        let mut non_modifier_keys: Vec<u32> = Vec::new();
+
+        // handle modifiers and store non modifiers
         for keycode in wt
             .xconn
             .query_keymap()
@@ -1284,13 +1288,6 @@ impl<T: 'static> EventProcessor<T> {
             .filter(|k| *k >= KEYCODE_OFFSET)
         {
             let keycode = keycode as u32;
-
-            let mut ker = kb_state.process_key_event(keycode, state);
-            let physical_key = ker.keycode();
-            let (logical_key, location) = ker.key();
-            let text = ker.text();
-            let (key_without_modifiers, _) = ker.key_without_modifiers();
-            let text_with_all_modifiers = ker.text_with_all_modifiers();
 
             if let Some(modifier) = mod_keymap.get_modifier(keycode as ffi::KeyCode) {
                 let old_modifiers = device_mod_state.modifiers();
@@ -1303,7 +1300,19 @@ impl<T: 'static> EventProcessor<T> {
                         event: WindowEvent::ModifiersChanged(device_mod_state.modifiers()),
                     });
                 }
+            } else {
+                non_modifier_keys.push(keycode);
             }
+        }
+
+        // handle non modifiers
+        for keycode in non_modifier_keys {
+            let mut ker = kb_state.process_key_event(keycode, state);
+            let physical_key = ker.keycode();
+            let (logical_key, location) = ker.key();
+            let text = ker.text();
+            let (key_without_modifiers, _) = ker.key_without_modifiers();
+            let text_with_all_modifiers = ker.text_with_all_modifiers();
 
             callback(Event::WindowEvent {
                 window_id,
